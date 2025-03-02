@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#3498db">
+  <title>Fartlek Trainer</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root {
+      --primary-color: #3498db;
+      --secondary-color: #2ecc71;
+      --warning-color: #e74c3c;
+      --dark-color: #34495e;
+      --light-color: #ecf0f1;
+      --transition-speed: 0.3s;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    body {
+      background-color: var(--light-color);
+      color: var(--dark-color);
+      line-height: 1.6;
+      padding: 20px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    h1 {
+      color: var(--primary-color);
+      margin-bottom: 10px;
+    }
+    
+    .section {
+      background-color: white;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    
+    .section-mini {
+      background-color: white;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 15px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    
+    h2 {
+      color: var(--primary-color);
+      margin-bottom: 15px;
+      font-size: 1.3rem;
+    }
+    
+    .input-group {
+      margin-bottom: 15px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    
+    input, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 1rem;
+    }
+    
+    button {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background-color var(--transition-speed);
+      width: 100%;
+      margin-top: 10px;
+    }
+    
+    button:hover {
+      background-color: #2980b9;
+    }
+    
+    .timer-display {
+      font-size: 3rem;
+      text-align: center;
+      margin: 20px 0;
+      font-weight: bold;
+      font-family: monospace;
+    }
+    
+    .current-stage {
+      font-size: 1.5rem;
+      text-align: center;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      font-weight: bold;
+      transition: background-color var(--transition-speed);
+    }
+    
+    .warm-up {
+      background-color: #f39c12;
+      color: white;
+    }
+    
+    .fast-run {
+      background-color: var(--warning-color);
+      color: white;
+    }
+    
+    .slow-run {
+      background-color: var(--secondary-color);
+      color: white;
+    }
+    
+    .cool-down {
+      background-color: var(--primary-color);
+      color: white;
+    }
+    
+    .progress-container {
+      height: 8px;
+      background-color: #ddd;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      background-color: var(--primary-color);
+      border-radius: 4px;
+      width: 0%;
+      transition: width 1s linear;
+    }
+    
+    .session-summary {
+      font-size: 0.9rem;
+      margin-top: 10px;
+    }
+    
+    .control-buttons, .button-group {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .control-buttons button, .button-group button {
+      flex: 1;
+    }
+    
+    .pause-button {
+      background-color: #f39c12;
+    }
+    
+    .stop-button {
+      background-color: var(--warning-color);
+    }
+    
+    .workout-screen, .summary-screen {
+      display: none;
+    }
+    
+    .active {
+      display: block;
+    }
+    
+    .next-up {
+      font-size: 1rem;
+      text-align: center;
+      margin-bottom: 10px;
+      color: #7f8c8d;
+    }
+    
+    .saved-workouts {
+      margin-top: 20px;
+    }
+    
+    .saved-workout-item {
+      background-color: white;
+      padding: 10px;
+      border-radius: 5px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: background-color var(--transition-speed);
+    }
+    
+    .saved-workout-item:hover {
+      background-color: #eee;
+    }
+    
+    .workout-actions {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 5px;
+    }
+    
+    .workout-actions button {
+      width: auto;
+      padding: 5px 10px;
+      font-size: 0.8rem;
+    }
+    
+    .delete-workout {
+      background-color: var(--warning-color);
+    }
+    
+    @media (max-width: 400px) {
+      body {
+        padding: 10px;
+      }
+      
+      .section {
+        padding: 15px;
+      }
+      
+      .timer-display {
+        font-size: 2.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Only header should be above the workout screen -->
+  <header>
+    <h1>Fartlek Trainer</h1>
+    <p>Create custom interval training workouts</p>
+  </header>
+  
+  <!-- Workout screen should be right after header when active -->
+  <div id="workout-screen" class="section workout-screen">
+    <div class="progress-container">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    
+    <div class="current-stage" id="current-stage">
+      Warm-up
+    </div>
+    
+    <div class="next-up" id="next-up">
+      Next: Fast Run (30s)
+    </div>
+    
+    <div class="timer-display" id="timer-display">
+      0:10
+    </div>
+    
+    <div class="control-buttons">
+      <button id="pause-workout" class="pause-button">Pause</button>
+      <button id="stop-workout" class="stop-button">Stop</button>
+    </div>
+  </div>
+  
+  <!-- Workout summary is no longer needed as a separate element -->
+  
+  <div id="setup-screen" class="section active">
+    <h2>Create Your Workout</h2>
+    
+    <div class="input-group">
+      <label for="warm-up-time">Warm-up (minutes)</label>
+      <input type="number" id="warm-up-time" min="0" max="30" value="5">
+    </div>
+    
+    <div class="input-group">
+      <label for="fast-run-time">Fast Run (seconds)</label>
+      <input type="number" id="fast-run-time" min="10" max="300" value="30">
+    </div>
+    
+    <div class="input-group">
+      <label for="slow-run-time">Slow Run (seconds)</label>
+      <input type="number" id="slow-run-time" min="10" max="300" value="60">
+    </div>
+    
+    <div class="input-group">
+      <label for="repeats">Number of Repeats</label>
+      <input type="number" id="repeats" min="1" max="20" value="5">
+    </div>
+    
+    <div class="input-group">
+      <label for="cool-down-time">Cool-down (minutes)</label>
+      <input type="number" id="cool-down-time" min="0" max="30" value="5">
+    </div>
+    
+    <div class="session-summary" id="session-summary">
+      Total workout time: <span id="total-time">15:30</span>
+    </div>
+    
+    <div class="button-group">
+      <button id="start-workout">Start Workout</button>
+      <button id="save-setup-workout">Save Workout</button>
+    </div>
+    
+    <div class="saved-workouts">
+      <h2>Saved Workouts</h2>
+      <div id="saved-workouts-list"></div>
+    </div>
+  </div>
+  
+  <div id="workout-screen" class="section workout-screen">
+    <div class="progress-container">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    
+    <div class="current-stage" id="current-stage">
+      Warm-up
+    </div>
+    
+    <div class="next-up" id="next-up">
+      Next: Fast Run (30s)
+    </div>
+    
+    <div class="timer-display" id="timer-display">
+      5:00
+    </div>
+    
+    <div class="control-buttons">
+      <button id="pause-workout" class="pause-button">Pause</button>
+      <button id="stop-workout" class="stop-button">Stop</button>
+    </div>
+  </div>
+  
+  <div id="summary-screen" class="section summary-screen">
+    <h2>Workout Complete!</h2>
+    <p>Great job completing your fartlek training session.</p>
+    
+    <div class="workout-summary" id="workout-summary">
+      <p>Total time: <span id="summary-total-time">15:30</span></p>
+      <p>Intervals completed: <span id="summary-intervals">5/5</span></p>
+    </div>
+    
+    <div class="input-group">
+      <label for="workout-name">Save this workout:</label>
+      <input type="text" id="workout-name" placeholder="My Fartlek Workout">
+    </div>
+    
+    <button id="save-workout">Save Workout</button>
+    <button id="return-home">New Workout</button>
+  </div>
+
+  <script>
+    // DOM Elements
+    const setupScreen = document.getElementById('setup-screen');
+    const workoutScreen = document.getElementById('workout-screen');
+    const summaryScreen = document.getElementById('summary-screen');
+    const startWorkoutBtn = document.getElementById('start-workout');
+    const pauseWorkoutBtn = document.getElementById('pause-workout');
+    const stopWorkoutBtn = document.getElementById('stop-workout');
+    const saveWorkoutBtn = document.getElementById('save-workout');
+    const returnHomeBtn = document.getElementById('return-home');
+    const timerDisplay = document.getElementById('timer-display');
+    const currentStageElement = document.getElementById('current-stage');
+    const nextUpElement = document.getElementById('next-up');
+    const progressBar = document.getElementById('progress-bar');
+    const sessionSummary = document.getElementById('session-summary');
+    const totalTimeElement = document.getElementById('total-time');
+    const workoutTotalTime = document.getElementById('workout-total-time');
+    const workoutSummaryTop = document.getElementById('workout-summary-top');
+    const summaryTotalTime = document.getElementById('summary-total-time');
+    const summaryIntervals = document.getElementById('summary-intervals');
+    const savedWorkoutsList = document.getElementById('saved-workouts-list');
+    
+    // Input elements
+    const warmUpInput = document.getElementById('warm-up-time');
+    const fastRunInput = document.getElementById('fast-run-time');
+    const slowRunInput = document.getElementById('slow-run-time');
+    const repeatsInput = document.getElementById('repeats');
+    const coolDownInput = document.getElementById('cool-down-time');
+    const workoutNameInput = document.getElementById('workout-name');
+    
+    // Audio context for beeps
+    let audioContext;
+    
+    // Workout state
+    let workout = {
+      warmUp: 5 * 60, // 5 minutes in seconds
+      fastRun: 30,
+      slowRun: 60,
+      repeats: 5,
+      coolDown: 5 * 60,
+      currentStage: 'setup',
+      currentRepeat: 0,
+      timeRemaining: 0,
+      totalTime: 0,
+      timer: null,
+      isPaused: false
+    };
+    
+    // Initialize
+    function init() {
+      calculateTotalTime();
+      loadSavedWorkouts();
+      
+      // Add event listeners for input changes
+      warmUpInput.addEventListener('input', calculateTotalTime);
+      fastRunInput.addEventListener('input', calculateTotalTime);
+      slowRunInput.addEventListener('input', calculateTotalTime);
+      repeatsInput.addEventListener('input', calculateTotalTime);
+      coolDownInput.addEventListener('input', calculateTotalTime);
+      
+      // Button event listeners
+      startWorkoutBtn.addEventListener('click', startWorkout);
+      pauseWorkoutBtn.addEventListener('click', togglePause);
+      stopWorkoutBtn.addEventListener('click', stopWorkout);
+      saveWorkoutBtn.addEventListener('click', saveWorkout);
+      returnHomeBtn.addEventListener('click', returnToHome);
+      document.getElementById('save-setup-workout').addEventListener('click', saveSetupWorkout);
+      
+      // Register service worker for PWA
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('service-worker.js')
+          .then(reg => console.log('Service worker registered', reg))
+          .catch(err => console.log('Service worker registration failed:', err));
+      }
+    }
+    
+    // Calculate total workout time
+    function calculateTotalTime() {
+      const warmUp = parseInt(warmUpInput.value) * 60;
+      const fastRun = parseInt(fastRunInput.value);
+      const slowRun = parseInt(slowRunInput.value);
+      const repeats = parseInt(repeatsInput.value);
+      const coolDown = parseInt(coolDownInput.value) * 60;
+      
+      const totalSeconds = warmUp + (fastRun + slowRun) * repeats + coolDown;
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      
+      totalTimeElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    // Format time for display (MM:SS)
+    function formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+    
+    // Start the workout
+    function startWorkout() {
+      // Initialize audio context on user gesture
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Get values from inputs
+      workout.warmUp = parseInt(warmUpInput.value) * 60;
+      workout.fastRun = parseInt(fastRunInput.value);
+      workout.slowRun = parseInt(slowRunInput.value);
+      workout.repeats = parseInt(repeatsInput.value);
+      workout.coolDown = parseInt(coolDownInput.value) * 60;
+      
+      // Calculate total time
+      workout.totalTime = workout.warmUp + 
+                         (workout.fastRun + workout.slowRun) * workout.repeats + 
+                         workout.coolDown;
+      
+      // Make sure workout screen is the first element after header
+      const header = document.querySelector('header');
+      document.body.insertBefore(workoutScreen, header.nextSibling);
+      
+      // Show workout screen
+      setupScreen.classList.remove('active');
+      workoutScreen.classList.add('active');
+      
+      // Start with warm-up
+      startWarmUp();
+    }
+    
+    // Start warm-up phase
+    function startWarmUp() {
+      if (workout.warmUp <= 0) {
+        startIntervals();
+        return;
+      }
+      
+      workout.currentStage = 'warm-up';
+      currentStageElement.textContent = 'Warm-up';
+      currentStageElement.className = 'current-stage warm-up';
+      
+      workout.timeRemaining = workout.warmUp;
+      nextUpElement.textContent = `Next: Fast Run (${workout.fastRun}s)`;
+      
+      // Play starting beep
+      playBeep(440, 0.2);
+      
+      // Start timer
+      startTimer();
+    }
+    
+    // Start interval training
+    function startIntervals() {
+      workout.currentRepeat = 1;
+      startFastRun();
+    }
+    
+    // Start fast run phase
+    function startFastRun() {
+      workout.currentStage = 'fast-run';
+      currentStageElement.textContent = `Fast Run (${workout.currentRepeat}/${workout.repeats})`;
+      currentStageElement.className = 'current-stage fast-run';
+      
+      workout.timeRemaining = workout.fastRun;
+      nextUpElement.textContent = `Next: Slow Run (${workout.slowRun}s)`;
+      
+      // Play three high beeps for fast run
+      playBeep(880, 0.1);
+      setTimeout(() => playBeep(880, 0.1), 200);
+      setTimeout(() => playBeep(880, 0.1), 400);
+      
+      // Start timer
+      startTimer();
+    }
+    
+    // Start slow run phase
+    function startSlowRun() {
+      workout.currentStage = 'slow-run';
+      currentStageElement.textContent = `Slow Run (${workout.currentRepeat}/${workout.repeats})`;
+      currentStageElement.className = 'current-stage slow-run';
+      
+      workout.timeRemaining = workout.slowRun;
+      
+      if (workout.currentRepeat < workout.repeats) {
+        nextUpElement.textContent = `Next: Fast Run (${workout.fastRun}s)`;
+      } else {
+        nextUpElement.textContent = `Next: Cool-down (${Math.floor(workout.coolDown / 60)}m)`;
+      }
+      
+      // Play two low beeps for slow run
+      playBeep(440, 0.1);
+      setTimeout(() => playBeep(440, 0.1), 200);
+      
+      // Start timer
+      startTimer();
+    }
+    
+    // Start cool-down phase
+    function startCoolDown() {
+      workout.currentStage = 'cool-down';
+      currentStageElement.textContent = 'Cool-down';
+      currentStageElement.className = 'current-stage cool-down';
+      
+      workout.timeRemaining = workout.coolDown;
+      nextUpElement.textContent = 'Almost done!';
+      
+      // Play one low beep for cool-down
+      playBeep(440, 0.2);
+      
+      // Start timer
+      startTimer();
+    }
+    
+    // Complete the workout
+    function completeWorkout() {
+      // Clear timer
+      clearInterval(workout.timer);
+      
+      // Play completion sound
+      playBeep(660, 0.1);
+      setTimeout(() => playBeep(770, 0.1), 200);
+      setTimeout(() => playBeep(880, 0.2), 400);
+      
+      // Update summary screen
+      summaryTotalTime.textContent = totalTimeElement.textContent;
+      summaryIntervals.textContent = `${workout.currentRepeat}/${workout.repeats}`;
+      
+      // Show summary screen
+      workoutScreen.classList.remove('active');
+      summaryScreen.classList.add('active');
+    }
+    
+    // Start the timer
+    function startTimer() {
+      // Clear any existing timer
+      if (workout.timer) {
+        clearInterval(workout.timer);
+      }
+      
+      // Update timer display
+      updateTimerDisplay();
+      
+      // Start a new timer
+      workout.timer = setInterval(() => {
+        // If paused, do nothing
+        if (workout.isPaused) return;
+        
+        // Decrease time remaining
+        workout.timeRemaining--;
+        
+        // Update timer display
+        updateTimerDisplay();
+        
+        // Check if current phase is complete
+        if (workout.timeRemaining <= 0) {
+          // Play countdown beeps in the last 3 seconds
+          if (workout.timeRemaining <= 3 && workout.timeRemaining > 0) {
+            playBeep(660, 0.1);
+          }
+          
+          clearInterval(workout.timer);
+          
+          // Transition to next phase
+          switch (workout.currentStage) {
+            case 'warm-up':
+              startIntervals();
+              break;
+            case 'fast-run':
+              startSlowRun();
+              break;
+            case 'slow-run':
+              workout.currentRepeat++;
+              if (workout.currentRepeat <= workout.repeats) {
+                startFastRun();
+              } else {
+                startCoolDown();
+              }
+              break;
+            case 'cool-down':
+              completeWorkout();
+              break;
+          }
+        }
+      }, 1000);
+    }
+    
+    // Update timer display
+    function updateTimerDisplay() {
+      timerDisplay.textContent = formatTime(workout.timeRemaining);
+      
+      // Update progress bar
+      let totalElapsedTime = 0;
+      
+      switch (workout.currentStage) {
+        case 'warm-up':
+          totalElapsedTime = workout.warmUp - workout.timeRemaining;
+          break;
+        case 'fast-run':
+        case 'slow-run':
+          totalElapsedTime = workout.warmUp + 
+                            (workout.fastRun + workout.slowRun) * (workout.currentRepeat - 1) +
+                            (workout.currentStage === 'fast-run' ? 0 : workout.fastRun) +
+                            (workout.fastRun + workout.slowRun - workout.timeRemaining);
+          break;
+        case 'cool-down':
+          totalElapsedTime = workout.totalTime - workout.coolDown + (workout.coolDown - workout.timeRemaining);
+          break;
+      }
+      
+      const progressPercentage = (totalElapsedTime / workout.totalTime) * 100;
+      progressBar.style.width = `${progressPercentage}%`;
+    }
+    
+    // Toggle pause/resume
+    function togglePause() {
+      workout.isPaused = !workout.isPaused;
+      
+      if (workout.isPaused) {
+        pauseWorkoutBtn.textContent = 'Resume';
+      } else {
+        pauseWorkoutBtn.textContent = 'Pause';
+        // Play resume beep
+        playBeep(660, 0.1);
+      }
+    }
+    
+    // Stop the workout
+    function stopWorkout() {
+      // Clear timer
+      clearInterval(workout.timer);
+      
+      // Ask for confirmation
+      if (confirm('Are you sure you want to stop the workout?')) {
+        // Reset to setup screen
+        returnToHome();
+      } else {
+        // Resume timer
+        startTimer();
+      }
+    }
+    
+    // Return to home screen
+    function returnToHome() {
+      // Hide current screen
+      workoutScreen.classList.remove('active');
+      summaryScreen.classList.remove('active');
+      
+      // Show setup screen
+      setupScreen.classList.add('active');
+      
+      // Reset workout state
+      workout.currentStage = 'setup';
+      workout.isPaused = false;
+      pauseWorkoutBtn.textContent = 'Pause';
+    }
+    
+    // Save the workout from summary screen
+    function saveWorkout() {
+      const workoutName = workoutNameInput.value.trim() || 'My Fartlek Workout';
+      
+      const savedWorkout = {
+        name: workoutName,
+        warmUp: parseInt(warmUpInput.value),
+        fastRun: parseInt(fastRunInput.value),
+        slowRun: parseInt(slowRunInput.value),
+        repeats: parseInt(repeatsInput.value),
+        coolDown: parseInt(coolDownInput.value),
+        date: new Date().toISOString()
+      };
+      
+      // Get existing workouts
+      let savedWorkouts = JSON.parse(localStorage.getItem('fartlekWorkouts')) || [];
+      
+      // Add new workout
+      savedWorkouts.push(savedWorkout);
+      
+      // Save to localStorage
+      localStorage.setItem('fartlekWorkouts', JSON.stringify(savedWorkouts));
+      
+      // Update saved workouts list
+      loadSavedWorkouts();
+      
+      // Return to home
+      returnToHome();
+    }
+    
+    // Save workout from setup screen
+    function saveSetupWorkout() {
+      // Prompt for workout name
+      const workoutName = prompt('Enter a name for this workout:', 'My Fartlek Workout') || 'My Fartlek Workout';
+      
+      if (workoutName) {
+        const savedWorkout = {
+          name: workoutName,
+          warmUp: parseInt(warmUpInput.value),
+          fastRun: parseInt(fastRunInput.value),
+          slowRun: parseInt(slowRunInput.value),
+          repeats: parseInt(repeatsInput.value),
+          coolDown: parseInt(coolDownInput.value),
+          date: new Date().toISOString()
+        };
+        
+        // Get existing workouts
+        let savedWorkouts = JSON.parse(localStorage.getItem('fartlekWorkouts')) || [];
+        
+        // Add new workout
+        savedWorkouts.push(savedWorkout);
+        
+        // Save to localStorage
+        localStorage.setItem('fartlekWorkouts', JSON.stringify(savedWorkouts));
+        
+        // Update saved workouts list
+        loadSavedWorkouts();
+        
+        // Show confirmation
+        alert('Workout saved!');
+      }
+    }
+    
+    // Load saved workouts
+    function loadSavedWorkouts() {
+      const savedWorkouts = JSON.parse(localStorage.getItem('fartlekWorkouts')) || [];
+      
+      savedWorkoutsList.innerHTML = '';
+      
+      if (savedWorkouts.length === 0) {
+        savedWorkoutsList.innerHTML = '<p>No saved workouts yet</p>';
+        return;
+      }
+      
+      savedWorkouts.forEach((workout, index) => {
+        const workoutItem = document.createElement('div');
+        workoutItem.className = 'saved-workout-item';
+        
+        const totalSeconds = (workout.warmUp * 60) + 
+                            ((workout.fastRun + workout.slowRun) * workout.repeats) + 
+                            (workout.coolDown * 60);
+        
+        workoutItem.innerHTML = `
+          <div class="workout-info">
+            <strong>${workout.name}</strong><br>
+            Warm-up: ${workout.warmUp}m | Fast: ${workout.fastRun}s | Slow: ${workout.slowRun}s<br>
+            Repeats: ${workout.repeats} | Cool-down: ${workout.coolDown}m | Total: ${formatTime(totalSeconds)}
+          </div>
+          <div class="workout-actions">
+            <button class="load-workout">Load</button>
+            <button class="delete-workout">Delete</button>
+          </div>
+        `;
+        
+        // Load workout button
+        workoutItem.querySelector('.load-workout').addEventListener('click', () => {
+          warmUpInput.value = workout.warmUp;
+          fastRunInput.value = workout.fastRun;
+          slowRunInput.value = workout.slowRun;
+          repeatsInput.value = workout.repeats;
+          coolDownInput.value = workout.coolDown;
+          
+          calculateTotalTime();
+        });
+        
+        // Delete workout button
+        workoutItem.querySelector('.delete-workout').addEventListener('click', () => {
+          if (confirm('Are you sure you want to delete this workout?')) {
+            savedWorkouts.splice(index, 1);
+            localStorage.setItem('fartlekWorkouts', JSON.stringify(savedWorkouts));
+            loadSavedWorkouts();
+          }
+        });
+        
+        savedWorkoutsList.appendChild(workoutItem);
+      });
+    }
+    
+    // Play a beep sound and vibrate if supported
+    function playBeep(frequency, duration) {
+      try {
+        // Make the duration longer
+        const actualDuration = duration * 2; // Double the duration
+        
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        
+        gainNode.gain.value = 1;
+        
+        oscillator.start();
+        
+        // Fade out to avoid clicks
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + actualDuration);
+        
+        // Stop the oscillator after duration
+        setTimeout(() => {
+          oscillator.stop();
+        }, actualDuration * 1000);
+        
+        // Vibrate if supported
+        if ('vibrate' in navigator) {
+          navigator.vibrate(actualDuration * 1000);
+        }
+      } catch (error) {
+        console.error('Audio error:', error);
+      }
+    }
+    
+    // Initialize on load
+    window.addEventListener('load', init);
+  </script>
+</body>
+</html>

@@ -6,8 +6,12 @@
   <meta name="theme-color" content="#3498db">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- Add apple-touch-startup-image for PWA splash screen -->
+  <link rel="apple-touch-startup-image" href="icon-512.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <title>Fartlek Trainer</title>
   <link rel="manifest" href="manifest.json">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js"></script>
   <style>
     :root {
       --primary-color: #3498db;
@@ -409,6 +413,19 @@
   </div>
 
   <script>
+    // Set up NoSleep.js
+    let noSleep = null;
+    
+    // Web Audio context for keeping the app active
+    let audioContext = null;
+    let silentAudio = null;
+    
+    // For tracking visibility changes and background timer management
+    let timerInterval = null;
+    let lastTickTime = 0;
+    let backgroundTimeOffset = 0;
+    let visibilityState = 'visible';
+    
     // DOM Elements
     const setupScreen = document.getElementById('setup-screen');
     const workoutScreen = document.getElementById('workout-screen');
@@ -438,9 +455,6 @@
     const coolDownInput = document.getElementById('cool-down-time');
     const workoutNameInput = document.getElementById('workout-name');
     
-    // Audio context for beeps
-    let audioContext;
-    
     // Workout state
     let workout = {
       warmUp: 5 * 60, // 5 minutes in seconds
@@ -453,13 +467,17 @@
       timeRemaining: 0,
       totalTime: 0,
       timer: null,
-      isPaused: false
+      isPaused: false,
+      worker: null
     };
     
     // Initialize
     function init() {
       calculateTotalTime();
       loadSavedWorkouts();
+      
+      // Initialize NoSleep
+      noSleep = new NoSleep();
       
       // Add event listeners for input changes
       warmUpInput.addEventListener('input', calculateTotalTime);
@@ -476,12 +494,109 @@
       returnHomeBtn.addEventListener('click', returnToHome);
       document.getElementById('save-setup-workout').addEventListener('click', saveSetupWorkout);
       
+      // Set up visibility change detection
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
       // Register service worker for PWA
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('service-worker.js')
           .then(reg => console.log('Service worker registered', reg))
           .catch(err => console.log('Service worker registration failed:', err));
       }
+      
+      // If app was added to home screen, suggest opening it from there
+      if (window.navigator.standalone) {
+        console.log("App is running in standalone mode");
+      } else if (window.matchMedia('(display-mode: standalone)').matches) {
+        console.log("App is running in standalone mode");
+      } else if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        const lastPrompt = localStorage.getItem('homeScreenPromptTime');
+        const now = new Date().getTime();
+        
+        // Show prompt once per day
+        if (!lastPrompt || (now - lastPrompt > 24 * 60 * 60 * 1000)) {
+          setTimeout(() => {
+            if (confirm("For best experience with timers, add this app to your home screen and open it from there.")) {
+              alert("To add to home screen: tap the share icon, then 'Add to Home Screen'");
+            }
+            localStorage.setItem('homeScreenPromptTime', now);
+          }, 3000);
+        }
+      }
+    }
+    
+    // Handle visibility changes (app going to background/foreground)
+    function handleVisibilityChange() {
+      visibilityState = document.visibilityState;
+      
+      if (visibilityState === 'hidden') {
+        // App going to background
+        if (workout.currentStage !== 'setup') {
+          lastTickTime = Date.now();
+          console.log('App went to background at:', lastTickTime);
+        }
+      } else if (visibilityState === 'visible') {
+        // App coming back to foreground
+        if (workout.currentStage !== 'setup' && lastTickTime > 0) {
+          // Calculate how much time passed while in background
+          const now = Date.now();
+          const timePassed = Math.floor((now - lastTickTime) / 1000);
+          console.log('App returned to foreground. Seconds passed:', timePassed);
+          
+          if (timePassed > 1 && !workout.isPaused) {
+            // Update timer accordingly
+            workout.timeRemaining = Math.max(0, workout.timeRemaining - timePassed);
+            updateTimerDisplay();
+            
+            // If the current stage completed while in background
+            if (workout.timeRemaining <= 0) {
+              // Handle stage completion
+              clearInterval(workout.timer);
+              
+              // Transition to next phase based on current stage
+              switch (workout.currentStage) {
+                case 'warm-up':
+                  startIntervals();
+                  break;
+                case 'fast-run':
+                  startSlowRun();
+                  break;
+                case 'slow-run':
+                  workout.currentRepeat++;
+                  if (workout.currentRepeat <= workout.repeats) {
+                    startFastRun();
+                  } else {
+                    startCoolDown();
+                  }
+                  break;
+                case 'cool-down':
+                  completeWorkout();
+                  break;
+              }
+            } else {
+              // Timer hasn't completed, just restart with new time
+              startTimer();
+            }
+          }
+        }
+      }
+    }
+    
+    // Create and play silent audio to keep the app active
+    function createSilentAudio() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      
+      // Create silent audio buffer (1s)
+      const buffer = audioContext.createBuffer(1, 44100, 44100);
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(audioContext.destination);
+      source.start();
+      
+      return source;
     }
     
     // Calculate total workout time
@@ -509,7 +624,23 @@
     // Start the workout
     function startWorkout() {
       // Initialize audio context on user gesture
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      
+      // Enable NoSleep to prevent screen from turning off
+      noSleep.enable().then(() => {
+        console.log('NoSleep enabled');
+      }).catch(err => {
+        console.error('NoSleep error:', err);
+      });
+      
+      // Start silent audio to keep iOS Safari active
+      silentAudio = createSilentAudio();
+      
+      // Reset background timer variables
+      lastTickTime = 0;
+      backgroundTimeOffset = 0;
       
       // Get values from inputs
       workout.warmUp = parseInt(warmUpInput.value) * 60;
@@ -538,6 +669,22 @@
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(err => {
           console.log('Error attempting to enable fullscreen:', err);
+        });
+      }
+      
+      // Keep screen awake using wake lock if available
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').then(wakeLock => {
+          console.log('Wake Lock activated');
+          
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+              // Re-request wake lock when app becomes visible again
+              navigator.wakeLock.request('screen');
+            }
+          });
+        }).catch(err => {
+          console.error('Wake Lock error:', err);
         });
       }
       
@@ -648,9 +795,16 @@
       // Show summary screen
       workoutScreen.classList.remove('active');
       summaryScreen.classList.add('active');
+      
+      // Keep NoSleep enabled until user returns to home
+      // but stop the silent audio as it's not needed for the summary screen
+      if (silentAudio) {
+        silentAudio.stop();
+        silentAudio = null;
+      }
     }
     
-    // Start the timer
+    // Start the timer with high precision and drift correction
     function startTimer() {
       // Clear any existing timer
       if (workout.timer) {
@@ -660,10 +814,28 @@
       // Update timer display
       updateTimerDisplay();
       
-      // Start a new timer
+      // Record start time for drift correction
+      const startTime = Date.now();
+      let expectedTime = startTime;
+      let ticks = 0;
+      
+      // Start a new timer with drift correction
       workout.timer = setInterval(() => {
         // If paused, do nothing
         if (workout.isPaused) return;
+        
+        // Calculate expected time vs actual time to correct for drift
+        ticks++;
+        expectedTime = startTime + (ticks * 1000);
+        const drift = Date.now() - expectedTime;
+        
+        // Correct interval if drift exceeds threshold
+        if (Math.abs(drift) > 100) {
+          console.log(`Time drift detected: ${drift}ms, correcting...`);
+          clearInterval(workout.timer);
+          startTimer(); // Restart timer
+          return;
+        }
         
         // Decrease time remaining
         workout.timeRemaining--;
@@ -671,13 +843,13 @@
         // Update timer display
         updateTimerDisplay();
         
+        // Play countdown beeps in the last 3 seconds
+        if (workout.timeRemaining <= 3 && workout.timeRemaining > 0) {
+          playBeep(660, 0.1);
+        }
+        
         // Check if current phase is complete
         if (workout.timeRemaining <= 0) {
-          // Play countdown beeps in the last 3 seconds
-          if (workout.timeRemaining <= 3 && workout.timeRemaining > 0) {
-            playBeep(660, 0.1);
-          }
-          
           clearInterval(workout.timer);
           
           // Transition to next phase
@@ -702,6 +874,57 @@
           }
         }
       }, 1000);
+      
+      // Use Web Worker for background timing (if supported)
+      if (window.Worker) {
+        try {
+          // Create a web worker for background timing
+          const workerBlob = new Blob([`
+            let timerId = null;
+            
+            self.onmessage = function(e) {
+              if (e.data.command === 'start') {
+                if (timerId) clearInterval(timerId);
+                timerId = setInterval(() => {
+                  self.postMessage({type: 'tick'});
+                }, 1000);
+              } else if (e.data.command === 'stop') {
+                if (timerId) {
+                  clearInterval(timerId);
+                  timerId = null;
+                }
+              }
+            };
+          `], {type: 'application/javascript'});
+          
+          const workerUrl = URL.createObjectURL(workerBlob);
+          const worker = new Worker(workerUrl);
+          
+          worker.onmessage = function(e) {
+            if (e.data.type === 'tick' && visibilityState === 'hidden' && !workout.isPaused) {
+              // Process background ticks
+              workout.timeRemaining--;
+              
+              // Check if phase complete while in background
+              if (workout.timeRemaining <= 0) {
+                // We'll handle the phase transition when visibility changes back
+                worker.postMessage({command: 'stop'});
+              }
+            }
+          };
+          
+          // Start the worker
+          worker.postMessage({command: 'start'});
+          
+          // Store the worker for cleanup
+          workout.worker = worker;
+          
+          // Clean up URL
+          URL.revokeObjectURL(workerUrl);
+        } catch (err) {
+          console.error('Web Worker error:', err);
+        }
+      }
     }
     
     // Update timer display
@@ -737,10 +960,21 @@
       
       if (workout.isPaused) {
         pauseWorkoutBtn.textContent = 'Resume';
+        
+        // Pause the Web Worker if active
+        if (workout.worker) {
+          workout.worker.postMessage({command: 'stop'});
+        }
       } else {
         pauseWorkoutBtn.textContent = 'Pause';
+        
         // Play resume beep
         playBeep(660, 0.1);
+        
+        // Restart the Web Worker if necessary
+        if (workout.worker) {
+          workout.worker.postMessage({command: 'start'});
+        }
       }
     }
     
@@ -748,6 +982,12 @@
     function stopWorkout() {
       // Clear timer
       clearInterval(workout.timer);
+      
+      // Stop web worker if active
+      if (workout.worker) {
+        workout.worker.postMessage({command: 'stop'});
+        workout.worker = null;
+      }
       
       // Ask for confirmation
       if (confirm('Are you sure you want to stop the workout?')) {
@@ -771,6 +1011,16 @@
         document.exitFullscreen().catch(err => {
           console.log('Error exiting fullscreen:', err);
         });
+      }
+      
+      // Disable NoSleep to allow screen to turn off again
+      noSleep.disable();
+      console.log('NoSleep disabled');
+      
+      // Stop silent audio loop
+      if (silentAudio) {
+        silentAudio.stop();
+        silentAudio = null;
       }
       
       // Show setup screen
